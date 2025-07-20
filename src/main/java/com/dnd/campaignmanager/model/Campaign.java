@@ -22,5 +22,6 @@ public class Campaign {
 
     @NotBlank
     private String ruleSys;
+    //this is to distinguish the rule sets between different campaigns like Delta Green, Pathfinder, M&M, DnD5e etc.
 
 }
