@@ -1,10 +1,7 @@
 package com.dnd.campaignmanager.model;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
-
-import java.util.ArrayList;
 
 @Entity
 @Data
@@ -21,9 +18,14 @@ public class CharacterStats {
     private Integer numberValue;
     private Boolean booleanValue;
 
-    //implement Getter later
+    //finished Getter
     public Object getVal(){
-        //idk what this is supposed to do yet but i need to figure it out
+        return switch(definition.getDataType()){
+            case "STRING" -> stringValue;
+            case "INTEGER" -> numberValue;
+            case "BOOLEAN" -> booleanValue;
+            default -> null;
+        };
     }
 
 }
