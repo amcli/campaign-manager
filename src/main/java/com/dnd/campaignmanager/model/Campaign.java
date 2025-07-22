@@ -1,11 +1,11 @@
 package com.dnd.campaignmanager.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.persistence.Id;
 import lombok.Data;
+
+import java.util.ArrayList;
+import java.util.List;
 
 
 @Entity
@@ -23,5 +23,9 @@ public class Campaign {
     @NotBlank
     private String ruleSys;
     //this is to distinguish the rule sets between different campaigns like Delta Green, Pathfinder, M&M, DnD5e etc.
+
+
+    @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<StatDefinition> statDef = new ArrayList<>();
 
 }

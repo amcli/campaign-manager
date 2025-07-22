@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Data
@@ -33,6 +34,12 @@ public class Character {
 
     @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CharacterStats> stats = new ArrayList<>();
+
+    public void addStat(CharacterStats stat){
+        stats.add(stat);
+        stat.setCharacter(this);
+    }
+
 
 
 }

@@ -10,7 +10,12 @@ public class CharacterStats {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "character_id")
+    private Character character;
+
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "stat_definition_id")
     private StatDefinition definition;
 
@@ -20,6 +25,8 @@ public class CharacterStats {
 
     //finished Getter
     public Object getVal(){
+        if(definition == null)
+            return null;
         return switch(definition.getDataType()){
             case "STRING" -> stringValue;
             case "INTEGER" -> numberValue;

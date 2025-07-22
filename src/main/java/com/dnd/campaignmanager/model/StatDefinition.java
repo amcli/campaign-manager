@@ -16,7 +16,7 @@ public class StatDefinition {
 
     private String dataType = "NUMBER"; //could change from number to string to boolean etc.
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campaign_id")
     private Campaign campaign;
 }
