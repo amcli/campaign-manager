@@ -26,11 +26,17 @@ public class Character {
     @NotBlank
     private String race;
 
+    private String charClass;
+
     private int level;
 
     @ManyToOne
     @JoinColumn(name = "campaign_id")
     private Campaign campaign;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "player_id")
+    private User player;
 
     @OneToMany(mappedBy = "character", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CharacterStats> stats = new ArrayList<>();
@@ -39,7 +45,5 @@ public class Character {
         stats.add(stat);
         stat.setCharacter(this);
     }
-
-
 
 }
