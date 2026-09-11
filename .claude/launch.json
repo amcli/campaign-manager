@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "campaign-manager",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": ["-q", "spring-boot:run"],
+      "port": 8080
+    },
+    {
+      "name": "campaign-manager-alt",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": ["-q", "spring-boot:run", "-Dspring-boot.run.arguments=--spring.config.import=file:./.claude/alt.properties"],
+      "port": 8081
+    }
+  ]
+}
