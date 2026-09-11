@@ -12,6 +12,12 @@
       "runtimeExecutable": "mvn",
       "runtimeArgs": ["-q", "spring-boot:run", "-Dspring-boot.run.arguments=--spring.config.import=file:./.claude/alt.properties"],
       "port": 8081
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 5173
     }
   ]
 }

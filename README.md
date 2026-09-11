@@ -9,15 +9,46 @@ Supported game systems: Dungeons & Dragons 5e, Pathfinder 2e, Mutants & Mastermi
 Call of Cthulhu 7e, and a generic/homebrew sheet. Each system defines its own character sheet fields
 in [`SheetTemplates`](src/main/java/com/dnd/campaignmanager/gamesystem/SheetTemplates.java).
 
+## Two packages
+
+| Package | Stack | Purpose |
+| --- | --- | --- |
+| repo root | Java 21, Spring Boot 3.5, Spring Security, Spring Data JPA | JSON API only. Owns all user data. Never serves HTML. |
+| `frontend/` | React 18, TypeScript, Vite, React Router | The browser app. Talks to the API under `/api`. |
+
+Keeping them apart means the backend can be locked down as a pure API: browsers only reach it through
+the `/api` paths, every other request is denied, sessions are HttpOnly cookies, and cross-origin calls are
+refused unless an origin is listed in `app.cors.allowed-origins`.
+
 ## Run it
 
-Requires Java 21. No database setup is needed; the default profile uses an embedded H2 database stored in `./data`.
+Requires Java 21 and Node 20+. No database setup is needed; the default profile uses an embedded H2
+database stored in `./data`.
+
+Start the API:
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-Open <http://localhost:8080>, create an account, and start.
+Start the frontend in a second terminal:
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run dev
+```
+
+Open <http://localhost:5173>, create an account, and start. The Vite dev server proxies `/api` to
+`http://localhost:8080`, so the browser sees one origin and cookies work without CORS. Point it elsewhere
+with `VITE_API_TARGET` in `frontend/.env.local`.
+
+### Deploying
+
+Build the frontend with `npm --prefix frontend run build` and serve `frontend/dist` from a reverse proxy
+(nginx, Caddy, or similar) that forwards `/api` to the Spring app. That keeps a single origin in
+production too. If you must host the two on different origins, list the frontend origin in
+`app.cors.allowed-origins` (env var `CORS_ALLOWED_ORIGINS` for the `mysql` profile) and switch the
+session cookie to `SameSite=None; Secure`.
 
 ### Dev login bypass
 
@@ -55,7 +86,14 @@ com.dnd.campaignmanager
 ├── campaign      Campaign, players, planning notes, and the DM-only rules
 ├── character     PlayerCharacter with a system-validated sheet and optional campaign
 ├── common        shared exceptions, error payload, timestamps
-└── config        session security and CSRF cookie setup
+└── config        session security, CSRF cookie setup, CORS allow-list
+
+frontend/src
+├── api           typed DTOs, fetch wrapper with CSRF header, one function per endpoint
+├── auth          current-user context (login, register, dev login, logout)
+├── components    layout, badges, panels, toast
+├── sheet         renders a character sheet from the game system's field template
+└── pages         one file per screen: login, dashboard, campaign, constraints, character
 ```
 
 Rules that shape the design:
