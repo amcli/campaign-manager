@@ -85,6 +85,7 @@ com.dnd.campaignmanager
 ├── gamesystem    GameSystem enum + per-system character sheet templates
 ├── campaign      Campaign, players, planning notes, and the DM-only rules
 ├── character     PlayerCharacter with a system-validated sheet and optional campaign
+├── invite        pending offers for a specific character to join a specific campaign
 ├── common        shared exceptions, error payload, timestamps
 └── config        session security, CSRF cookie setup, CORS allow-list
 
@@ -92,7 +93,7 @@ frontend/src
 ├── api           typed DTOs, fetch wrapper with CSRF header, one function per endpoint
 ├── auth          current-user context (login, register, dev login, logout)
 ├── components    layout, badges, panels, toast
-├── sheet         renders a character sheet from the game system's field template
+├── sheet         renders a character sheet from the game system's field template, plus the jump-to-section rail
 └── pages         one file per screen: login, dashboard, campaign, constraints, character
 ```
 
@@ -107,6 +108,10 @@ Rules that shape the design:
 - The game master can set **build constraints** per campaign. A character must satisfy them to join, and a
   sheet that breaks them cannot be saved while the character is in the campaign. Adding a rule never kicks
   anyone out; characters that now break a rule are flagged on the campaign page instead.
+- Bringing a character into a campaign works two ways. A player can join their own character directly, no
+  approval needed. A game master can instead **invite** one of an existing player's characters; that invite
+  sits pending, with nothing to expire it, until the character's owner accepts or declines it from their
+  dashboard. Either path still has to satisfy the build constraints and the single-active-campaign rule.
 - Deleting a campaign releases its characters; it never deletes them.
 - Sheet values are stored as strings and validated against the system template on every save.
 
@@ -141,8 +146,12 @@ header copied from the `XSRF-TOKEN` cookie.
 | POST, DELETE | `/api/campaigns/{id}/players`, `/api/campaigns/{id}/players/{userId}` | Manage players |
 | POST, PUT, DELETE | `/api/campaigns/{id}/notes`, `/api/campaigns/{id}/notes/{noteId}` | Planning notes |
 | POST, DELETE | `/api/campaigns/{id}/constraints`, `/api/campaigns/{id}/constraints/{constraintId}` | Build constraints |
+| GET | `/api/campaigns/{id}/players/{playerId}/characters` | That player's characters eligible to invite |
+| POST, DELETE | `/api/campaigns/{id}/invites`, `/api/campaigns/{id}/invites/{inviteId}` | DM sends or cancels an invite |
 | GET, POST, PUT, DELETE | `/api/characters`, `/api/characters/{id}` | Character CRUD |
-| PUT, DELETE | `/api/characters/{id}/campaign` | Join or leave a campaign |
+| PUT, DELETE | `/api/characters/{id}/campaign` | Join or leave a campaign directly (the owner's own character) |
+| GET | `/api/invites` | Pending invites addressed to your characters |
+| POST | `/api/invites/{id}/accept`, `/api/invites/{id}/decline` | Respond to an invite |
 
 ## Adding a game system
 

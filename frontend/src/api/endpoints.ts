@@ -6,11 +6,14 @@ import type {
   CampaignInput,
   CampaignSummary,
   CharacterDetail,
+  CharacterOption,
   CharacterSummary,
   GameSystem,
   GameSystemCode,
+  IncomingInvite,
   Note,
   NoteInput,
+  PendingInvite,
   Sheet,
   UserSummary,
 } from './types';
@@ -50,6 +53,18 @@ export const campaigns = {
     request<BuildConstraint>('POST', `/api/campaigns/${id}/constraints`, input),
   removeConstraint: (id: number, constraintId: number) =>
     request<void>('DELETE', `/api/campaigns/${id}/constraints/${constraintId}`),
+  eligibleCharacters: (id: number, playerId: number) =>
+    request<CharacterOption[]>('GET', `/api/campaigns/${id}/players/${playerId}/characters`),
+  inviteCharacter: (id: number, characterId: number) =>
+    request<PendingInvite>('POST', `/api/campaigns/${id}/invites`, { characterId }),
+  cancelInvite: (id: number, inviteId: number) =>
+    request<void>('DELETE', `/api/campaigns/${id}/invites/${inviteId}`),
+};
+
+export const invites = {
+  mine: () => request<IncomingInvite[]>('GET', '/api/invites'),
+  accept: (id: number) => request<CharacterDetail>('POST', `/api/invites/${id}/accept`),
+  decline: (id: number) => request<void>('POST', `/api/invites/${id}/decline`),
 };
 
 export const characters = {

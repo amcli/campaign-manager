@@ -7,6 +7,10 @@ interface Props {
   disabled?: boolean;
 }
 
+export function sheetSectionId(name: string): string {
+  return `sheet-section-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
+
 export function SheetFields({ system, sheet, onChange, disabled = false }: Props) {
   function set(key: string, value: string) {
     const next = { ...sheet };
@@ -21,7 +25,7 @@ export function SheetFields({ system, sheet, onChange, disabled = false }: Props
   return (
     <>
       {system.sections.map((section) => (
-        <div key={section.name}>
+        <div key={section.name} id={sheetSectionId(section.name)} className="sheet-section">
           <div className="section-title">{section.name}</div>
           <div className="field-grid">
             {section.fields.map((field) => (

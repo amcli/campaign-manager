@@ -1,21 +1,42 @@
 import { Link } from 'react-router-dom';
-import { campaigns, characters } from '../api/endpoints';
-import type { CampaignSummary, CharacterSummary } from '../api/types';
+import { campaigns, characters, invites } from '../api/endpoints';
+import type { CampaignSummary, CharacterSummary, IncomingInvite } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { useToast } from '../components/Toast';
 import { Badge, EmptyState, Panel, label, playerCountLabel, statusTone, systemClass } from '../components/ui';
 import { useAsync } from '../hooks';
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const { data, error } = useAsync(
-    () => Promise.all([campaigns.runByMe(), campaigns.playedByMe(), characters.mine()]),
+  const { notify, notifyError } = useToast();
+  const { data, error, reload } = useAsync(
+    () => Promise.all([campaigns.runByMe(), campaigns.playedByMe(), characters.mine(), invites.mine()]),
     [],
   );
 
   if (error) return <p className="error">{error}</p>;
   if (!data) return null;
-  const [run, playing, mine] = data;
+  const [run, playing, mine, myInvites] = data;
   const inPlay = mine.filter((c) => c.campaign).length;
+
+  async function accept(invite: IncomingInvite) {
+    try {
+      await invites.accept(invite.id);
+      notify(`${invite.characterName} joined ${invite.campaignName}`);
+      reload();
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function decline(invite: IncomingInvite) {
+    try {
+      await invites.decline(invite.id);
+      reload();
+    } catch (e) {
+      notifyError(e);
+    }
+  }
 
   return (
     <>
@@ -31,7 +52,28 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid-2">
+      {myInvites.length > 0 && (
+        <Panel title={`Campaign invites (${myInvites.length})`} className="mt">
+          <ul className="list">
+            {myInvites.map((invite) => (
+              <li key={invite.id}>
+                <span>
+                  <strong>{invite.characterName}</strong> invited to{' '}
+                  <Badge tone="system">{invite.gameSystemName}</Badge> campaign{' '}
+                  <Link to={`/campaigns/${invite.campaignId}`}>{invite.campaignName}</Link>
+                  <span className="muted small"> by {invite.dungeonMaster.username}</span>
+                </span>
+                <span className="actions">
+                  <button className="button small" onClick={() => accept(invite)}>Accept</button>
+                  <button className="button ghost small" onClick={() => decline(invite)}>Decline</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+      <div className="grid-2 mt">
         <Panel
           title="Campaigns you run"
           actions={<Link className="button small" to="/campaigns/new">New campaign</Link>}

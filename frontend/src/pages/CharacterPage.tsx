@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast';
 import { Badge, Field, Panel, systemClass } from '../components/ui';
 import { useAsync } from '../hooks';
+import { SectionNav } from '../sheet/SectionNav';
 import { SheetFields } from '../sheet/SheetFields';
 
 export function CharacterPage() {
@@ -124,19 +125,22 @@ export function CharacterPage() {
         </Panel>
       )}
 
-      <Panel title="Character sheet" className="mt">
-        <form className="stack" onSubmit={saveSheet}>
-          <Field label="Name">
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} disabled={!isOwner} />
-          </Field>
-          <SheetFields system={system} sheet={sheet} onChange={setSheet} disabled={!isOwner} />
-          {isOwner && (
-            <div className="actions end mt">
-              <button type="submit" className="button">Save sheet</button>
-            </div>
-          )}
-        </form>
-      </Panel>
+      <div className="sheet-layout mt">
+        <Panel title="Character sheet">
+          <form className="stack" onSubmit={saveSheet}>
+            <Field label="Name">
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} disabled={!isOwner} />
+            </Field>
+            <SheetFields system={system} sheet={sheet} onChange={setSheet} disabled={!isOwner} />
+            {isOwner && (
+              <div className="actions end mt">
+                <button type="submit" className="button">Save sheet</button>
+              </div>
+            )}
+          </form>
+        </Panel>
+        <SectionNav sections={system.sections} />
+      </div>
     </>
   );
 }

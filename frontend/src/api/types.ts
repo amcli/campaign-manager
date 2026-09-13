@@ -87,6 +87,32 @@ export interface CampaignCharacterEntry {
   buildViolations: string[];
 }
 
+export interface CharacterOption {
+  id: number;
+  name: string;
+}
+
+export interface PendingInvite {
+  id: number;
+  characterId: number;
+  characterName: string;
+  player: UserSummary;
+  createdAt: string;
+}
+
+export interface IncomingInvite {
+  id: number;
+  campaignId: number;
+  campaignName: string;
+  gameSystem: GameSystemCode;
+  gameSystemName: string;
+  gameMasterTitle: string;
+  dungeonMaster: UserSummary;
+  characterId: number;
+  characterName: string;
+  createdAt: string;
+}
+
 export interface CampaignDetail {
   id: number;
   name: string;
@@ -102,6 +128,7 @@ export interface CampaignDetail {
   characters: CampaignCharacterEntry[];
   notes: Note[];
   buildConstraints: BuildConstraint[];
+  pendingInvites: PendingInvite[];
   createdAt: string;
   updatedAt: string;
 }

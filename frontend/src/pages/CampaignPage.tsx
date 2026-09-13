@@ -1,7 +1,17 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { campaigns, characters } from '../api/endpoints';
-import { CAMPAIGN_STATUSES, NOTE_CATEGORIES, type CampaignDetail, type CampaignStatus, type Note, type NoteCategory, type NoteInput } from '../api/types';
+import {
+  CAMPAIGN_STATUSES,
+  NOTE_CATEGORIES,
+  type CampaignDetail,
+  type CampaignStatus,
+  type CharacterOption,
+  type Note,
+  type NoteCategory,
+  type NoteInput,
+  type UserSummary,
+} from '../api/types';
 import { useToast } from '../components/Toast';
 import { Badge, EmptyState, Field, Panel, label, playerCountLabel, statusTone, systemClass } from '../components/ui';
 import { useAsync } from '../hooks';
@@ -108,6 +118,31 @@ export function CampaignPage() {
               onJoin={(characterId) => run(() => characters.joinCampaign(characterId, id), 'Character joined the campaign')}
             />
           )}
+
+          {isDm && (
+            <>
+              <h2 className="mt">Invite a player's character</h2>
+              <p className="muted small">The character only joins once its owner accepts. Invites never expire on their own.</p>
+              <InviteCharacterForm
+                players={campaign.players}
+                campaignId={id}
+                onInvited={() => run(async () => undefined, 'Invite sent')}
+              />
+              {campaign.pendingInvites.length > 0 && (
+                <>
+                  <div className="section-title">Pending invites</div>
+                  <ul className="list">
+                    {campaign.pendingInvites.map((invite) => (
+                      <li key={invite.id}>
+                        <span>{invite.characterName} <span className="muted small">→ {invite.player.username}</span></span>
+                        <button className="button ghost small" onClick={() => run(() => campaigns.cancelInvite(id, invite.id))}>Cancel</button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          )}
         </Panel>
 
         <div className="stack">
@@ -197,12 +232,98 @@ function AddPlayerForm({ onAdd }: { onAdd: (username: string) => void }) {
 
 function JoinForm({ options, onJoin }: { options: { id: number; name: string }[]; onJoin: (characterId: number) => void }) {
   const [characterId, setCharacterId] = useState(options[0].id);
+
+  useEffect(() => {
+    if (!options.some((o) => o.id === characterId)) {
+      setCharacterId(options[0]?.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options]);
+
   return (
     <form className="inline-form mt" onSubmit={(e) => { e.preventDefault(); onJoin(characterId); }}>
       <select value={characterId} onChange={(e) => setCharacterId(Number(e.target.value))}>
         {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
       <button type="submit" className="button small">Bring character in</button>
+    </form>
+  );
+}
+
+function InviteCharacterForm({
+  players,
+  campaignId,
+  onInvited,
+}: {
+  players: UserSummary[];
+  campaignId: number;
+  onInvited: () => void;
+}) {
+  const { notifyError } = useToast();
+  const [playerId, setPlayerId] = useState<number | null>(players[0]?.id ?? null);
+  const [options, setOptions] = useState<CharacterOption[]>([]);
+  const [characterId, setCharacterId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setPlayerId((current) => (current !== null && players.some((p) => p.id === current) ? current : players[0]?.id ?? null));
+  }, [players]);
+
+  useEffect(() => {
+    if (playerId === null) {
+      setOptions([]);
+      setCharacterId(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    campaigns.eligibleCharacters(campaignId, playerId)
+      .then((loaded) => {
+        if (cancelled) return;
+        setOptions(loaded);
+        setCharacterId(loaded[0]?.id ?? null);
+      })
+      .catch((e) => !cancelled && notifyError(e))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId, campaignId]);
+
+  if (players.length === 0) {
+    return <p className="muted small">Add a player first, then you can invite one of their characters.</p>;
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (characterId === null) return;
+    campaigns.inviteCharacter(campaignId, characterId)
+      .then(onInvited)
+      .catch(notifyError);
+  }
+
+  return (
+    <form className="stack" onSubmit={submit}>
+      <div className="grid-2">
+        <Field label="Player">
+          <select value={playerId ?? ''} onChange={(e) => setPlayerId(Number(e.target.value))}>
+            {players.map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
+          </select>
+        </Field>
+        <Field label="Character">
+          <select
+            value={characterId ?? ''}
+            onChange={(e) => setCharacterId(Number(e.target.value))}
+            disabled={loading || options.length === 0}
+          >
+            {options.length
+              ? options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)
+              : <option value="">{loading ? 'Loading…' : 'No eligible characters'}</option>}
+          </select>
+        </Field>
+      </div>
+      <div className="actions end">
+        <button type="submit" className="button small" disabled={characterId === null}>Send invite</button>
+      </div>
     </form>
   );
 }

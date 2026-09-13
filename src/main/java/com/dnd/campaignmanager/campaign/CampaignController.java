@@ -1,5 +1,8 @@
 package com.dnd.campaignmanager.campaign;
 
+import com.dnd.campaignmanager.character.CharacterOption;
+import com.dnd.campaignmanager.invite.InviteRequest;
+import com.dnd.campaignmanager.invite.PendingInvite;
 import com.dnd.campaignmanager.user.AppUserPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -111,5 +114,28 @@ public class CampaignController {
                                       @PathVariable Long constraintId,
                                       @AuthenticationPrincipal AppUserPrincipal user) {
         campaignService.removeBuildConstraint(id, constraintId, user.id());
+    }
+
+    @GetMapping("/{id}/players/{playerId}/characters")
+    public List<CharacterOption> eligibleCharacters(@PathVariable Long id,
+                                                    @PathVariable Long playerId,
+                                                    @AuthenticationPrincipal AppUserPrincipal user) {
+        return campaignService.eligibleCharactersForInvite(id, playerId, user.id());
+    }
+
+    @PostMapping("/{id}/invites")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PendingInvite inviteCharacter(@PathVariable Long id,
+                                         @Valid @RequestBody InviteRequest request,
+                                         @AuthenticationPrincipal AppUserPrincipal user) {
+        return campaignService.inviteCharacter(id, request.characterId(), user.id());
+    }
+
+    @DeleteMapping("/{id}/invites/{inviteId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelInvite(@PathVariable Long id,
+                             @PathVariable Long inviteId,
+                             @AuthenticationPrincipal AppUserPrincipal user) {
+        campaignService.cancelInvite(id, inviteId, user.id());
     }
 }

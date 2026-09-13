@@ -289,6 +289,45 @@ input:disabled, textarea:disabled, select:disabled { background: #f6f1e7; color:
   color: var(--muted);
 }
 
+.sheet-section { scroll-margin-top: 90px; }
+
+.sheet-layout { display: grid; grid-template-columns: 1fr 180px; gap: 1.5rem; align-items: start; }
+@media (max-width: 900px) { .sheet-layout { grid-template-columns: 1fr; } }
+
+.section-nav {
+  position: sticky;
+  top: 84px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0 0.5rem 0.9rem;
+  border-left: 2px solid var(--line);
+}
+@media (max-width: 900px) { .section-nav { display: none; } }
+.section-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0.3rem 0;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.section-nav-item:hover { color: var(--accent); }
+.section-nav-item.active { color: var(--accent); font-weight: 600; }
+.section-nav-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+.section-nav-item.active .section-nav-dot { background: var(--accent); }
+
 .list { list-style: none; margin: 0; padding: 0; }
 .list li {
   display: flex;

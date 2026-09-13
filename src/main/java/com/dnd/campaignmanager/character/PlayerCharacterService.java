@@ -6,6 +6,9 @@ import com.dnd.campaignmanager.common.ConflictException;
 import com.dnd.campaignmanager.common.ForbiddenException;
 import com.dnd.campaignmanager.common.InvalidRequestException;
 import com.dnd.campaignmanager.common.ResourceNotFoundException;
+import com.dnd.campaignmanager.invite.CampaignInvite;
+import com.dnd.campaignmanager.invite.CampaignInviteRepository;
+import com.dnd.campaignmanager.invite.IncomingInvite;
 import com.dnd.campaignmanager.user.User;
 import com.dnd.campaignmanager.user.UserService;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +24,7 @@ import java.util.Map;
 public class PlayerCharacterService {
 
     private final PlayerCharacterRepository characterRepository;
+    private final CampaignInviteRepository inviteRepository;
     private final CampaignService campaignService;
     private final UserService userService;
 
@@ -75,6 +79,7 @@ public class PlayerCharacterService {
         }
         requireBuildAllowed(campaign, character.getSheet());
         character.joinCampaign(campaign);
+        inviteRepository.deleteAll(inviteRepository.findByCharacterId(character.getId()));
         return CharacterDetail.from(character);
     }
 
@@ -82,6 +87,40 @@ public class PlayerCharacterService {
         PlayerCharacter character = getOwnedBy(characterId, userId);
         character.leaveCampaign();
         return CharacterDetail.from(character);
+    }
+
+    @Transactional(readOnly = true)
+    public List<IncomingInvite> listMyInvites(Long userId) {
+        return inviteRepository.findByCharacterOwnerIdOrderByCreatedAtAsc(userId).stream()
+                .map(IncomingInvite::from)
+                .toList();
+    }
+
+    public CharacterDetail acceptInvite(Long inviteId, Long userId) {
+        CampaignInvite invite = getInviteAddressedTo(inviteId, userId);
+        PlayerCharacter character = invite.getCharacter();
+        if (character.isInCampaign()) {
+            inviteRepository.delete(invite);
+            throw new ConflictException(character.getName() + " is already in a campaign");
+        }
+        Campaign campaign = invite.getCampaign();
+        requireBuildAllowed(campaign, character.getSheet());
+        character.joinCampaign(campaign);
+        inviteRepository.deleteAll(inviteRepository.findByCharacterId(character.getId()));
+        return CharacterDetail.from(character);
+    }
+
+    public void declineInvite(Long inviteId, Long userId) {
+        inviteRepository.delete(getInviteAddressedTo(inviteId, userId));
+    }
+
+    private CampaignInvite getInviteAddressedTo(Long inviteId, Long userId) {
+        CampaignInvite invite = inviteRepository.findById(inviteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invite", inviteId));
+        if (!invite.getCharacter().isOwnedBy(userId)) {
+            throw new ForbiddenException("This invite is not addressed to you");
+        }
+        return invite;
     }
 
     private static void requireBuildAllowed(Campaign campaign, Map<String, String> sheet) {
