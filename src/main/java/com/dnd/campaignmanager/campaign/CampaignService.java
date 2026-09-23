@@ -95,14 +95,19 @@ public class CampaignService {
         return toDetail(campaign, userId);
     }
 
-    public CampaignDetail removePlayer(Long campaignId, Long playerId, Long userId) {
-        Campaign campaign = getRunBy(campaignId, userId);
+    public CampaignDetail removePlayer(Long campaignId, Long playerId, Long requesterId) {
+        Campaign campaign = getById(campaignId);
+        boolean selfRemoval = requesterId.equals(playerId);
+        if (!selfRemoval && !campaign.isRunBy(requesterId)) {
+            throw new ForbiddenException("Only the " + campaign.getGameSystem().getGameMasterTitle()
+                    + " can remove another player. You can still leave the campaign yourself");
+        }
         if (!campaign.hasPlayer(playerId)) {
             throw new ResourceNotFoundException("Player", playerId);
         }
         characterRepository.findByCampaignIdAndOwnerId(campaignId, playerId).forEach(PlayerCharacter::leaveCampaign);
         campaign.removePlayer(playerId);
-        return toDetail(campaign, userId);
+        return toDetail(campaign, requesterId);
     }
 
     public NoteResponse addNote(Long campaignId, NoteRequest request, Long userId) {

@@ -205,6 +205,50 @@ class ApiFlowTest {
     }
 
     @Test
+    void playerCanLeaveButCannotRemoveSomeoneElse() throws Exception {
+        String otherPlayer = "other_" + UUID.randomUUID().toString().substring(0, 8);
+        MockHttpSession otherSession = register(otherPlayer);
+
+        long campaignId = createCampaign(dmSession, "Waterdeep Dragon Heist", "DND_5E");
+        addPlayer(dmSession, campaignId, playerUsername);
+        addPlayer(dmSession, campaignId, otherPlayer);
+        long characterId = createCharacter(playerSession, "Dex", "DND_5E", Map.of());
+        mockMvc.perform(authed(put("/api/characters/" + characterId + "/campaign"), playerSession)
+                        .content(json(Map.of("campaignId", campaignId))))
+                .andExpect(status().isOk());
+
+        long playerId = idOf(mockMvc.perform(get("/api/auth/me").session(playerSession))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        // A player cannot remove a different player.
+        mockMvc.perform(delete("/api/campaigns/" + campaignId + "/players/" + playerId).session(otherSession).with(csrf()))
+                .andExpect(status().isForbidden());
+
+        // A player can remove themselves, which releases their character too.
+        mockMvc.perform(delete("/api/campaigns/" + campaignId + "/players/" + playerId).session(playerSession).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.players.length()").value(1))
+                .andExpect(jsonPath("$.players[0].username").value(otherPlayer));
+
+        mockMvc.perform(get("/api/characters/" + characterId).session(playerSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.campaign").isEmpty());
+
+        // Having left, the former player can no longer see the campaign at all.
+        mockMvc.perform(get("/api/campaigns/" + campaignId).session(playerSession))
+                .andExpect(status().isForbidden());
+
+        // The DM can still remove the remaining player directly.
+        long otherPlayerId = idOf(mockMvc.perform(get("/api/auth/me").session(otherSession))
+                .andExpect(status().isOk())
+                .andReturn());
+        mockMvc.perform(delete("/api/campaigns/" + campaignId + "/players/" + otherPlayerId).session(dmSession).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.players.length()").value(0));
+    }
+
+    @Test
     void maxPlayersIsEnforcedAndCannotDropBelowCurrentCount() throws Exception {
         String secondPlayer = "second_" + UUID.randomUUID().toString().substring(0, 8);
         register(secondPlayer);
@@ -417,7 +461,7 @@ class ApiFlowTest {
         mockMvc.perform(authed(post("/api/campaigns/" + campaignId + "/players"), session)
                         .content(json(Map.of("username", username))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.players[0].username").value(username));
+                .andExpect(jsonPath("$.players[*].username", org.hamcrest.Matchers.hasItem(username)));
     }
 
     private long createCharacter(MockHttpSession session, String name, String gameSystem, Map<String, String> sheet) throws Exception {

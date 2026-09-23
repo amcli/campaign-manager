@@ -99,7 +99,9 @@ frontend/src
 
 Rules that shape the design:
 
-- The user who creates a campaign is its game master. Only they can edit it, add or remove players, and write notes.
+- The user who creates a campaign is its game master. Only they can edit it, add players, and write notes.
+  Removing a player from the roster works two ways: the game master can remove anyone, and a player can
+  remove themselves. Either way releases that player's characters from the campaign, it never deletes them.
 - A note is private to the game master unless it is marked as shared with players.
 - A character belongs to one user and can be in at most one campaign at a time. It must leave before joining
   another, and the campaign must use the same game system.

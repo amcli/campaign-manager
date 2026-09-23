@@ -12,6 +12,7 @@ import {
   type NoteInput,
   type UserSummary,
 } from '../api/types';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast';
 import { Badge, EmptyState, Field, Panel, label, playerCountLabel, statusTone, systemClass } from '../components/ui';
 import { useAsync } from '../hooks';
@@ -19,6 +20,7 @@ import { useAsync } from '../hooks';
 export function CampaignPage() {
   const id = Number(useParams().id);
   const { data, error, reload } = useAsync(() => Promise.all([campaigns.get(id), characters.mine()]), [id]);
+  const { user } = useAuth();
   const { notify, notifyError } = useToast();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -27,6 +29,7 @@ export function CampaignPage() {
   if (!data) return null;
   const [campaign, myCharacters] = data;
   const isDm = campaign.viewerIsDungeonMaster;
+  const isPlayerHere = !isDm && campaign.players.some((player) => player.id === user?.id);
   const joinable = myCharacters.filter((c) => !c.campaign && c.gameSystem === campaign.gameSystem);
 
   async function run(action: () => Promise<unknown>, successMessage?: string) {
@@ -44,6 +47,23 @@ export function CampaignPage() {
     try {
       await campaigns.remove(id);
       notify('Campaign deleted');
+      navigate('/');
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  function removePlayer(playerId: number, username: string) {
+    if (!confirm(`Remove ${username} from "${campaign.name}"? Their characters in it will be released, not deleted.`)) return;
+    run(() => campaigns.removePlayer(id, playerId), `${username} removed`);
+  }
+
+  async function leaveCampaign() {
+    if (!user) return;
+    if (!confirm(`Leave "${campaign.name}"? Any of your characters in it will be released, not deleted.`)) return;
+    try {
+      await campaigns.removePlayer(id, user.id);
+      notify('Left the campaign');
       navigate('/');
     } catch (e) {
       notifyError(e);
@@ -71,6 +91,11 @@ export function CampaignPage() {
               <button className="button danger small" onClick={deleteCampaign}>Delete</button>
             </div>
           )}
+          {isPlayerHere && (
+            <div className="actions">
+              <button className="button danger small" onClick={leaveCampaign}>Leave campaign</button>
+            </div>
+          )}
         </div>
         {editing ? (
           <EditCampaignForm
@@ -89,7 +114,7 @@ export function CampaignPage() {
               <li key={player.id}>
                 <span>{player.username}</span>
                 {isDm && (
-                  <button className="button danger small" onClick={() => run(() => campaigns.removePlayer(id, player.id))}>Remove</button>
+                  <button className="button danger small" onClick={() => removePlayer(player.id, player.username)}>Remove</button>
                 )}
               </li>
             )) : <li className="muted">No players yet.</li>}
