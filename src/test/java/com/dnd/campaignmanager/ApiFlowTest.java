@@ -205,6 +205,50 @@ class ApiFlowTest {
     }
 
     @Test
+    void playerCanLeaveButCannotRemoveSomeoneElse() throws Exception {
+        String otherPlayer = "other_" + UUID.randomUUID().toString().substring(0, 8);
+        MockHttpSession otherSession = register(otherPlayer);
+
+        long campaignId = createCampaign(dmSession, "Waterdeep Dragon Heist", "DND_5E");
+        addPlayer(dmSession, campaignId, playerUsername);
+        addPlayer(dmSession, campaignId, otherPlayer);
+        long characterId = createCharacter(playerSession, "Dex", "DND_5E", Map.of());
+        mockMvc.perform(authed(put("/api/characters/" + characterId + "/campaign"), playerSession)
+                        .content(json(Map.of("campaignId", campaignId))))
+                .andExpect(status().isOk());
+
+        long playerId = idOf(mockMvc.perform(get("/api/auth/me").session(playerSession))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        // A player cannot remove a different player.
+        mockMvc.perform(delete("/api/campaigns/" + campaignId + "/players/" + playerId).session(otherSession).with(csrf()))
+                .andExpect(status().isForbidden());
+
+        // A player can remove themselves, which releases their character too.
+        mockMvc.perform(delete("/api/campaigns/" + campaignId + "/players/" + playerId).session(playerSession).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.players.length()").value(1))
+                .andExpect(jsonPath("$.players[0].username").value(otherPlayer));
+
+        mockMvc.perform(get("/api/characters/" + characterId).session(playerSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.campaign").isEmpty());
+
+        // Having left, the former player can no longer see the campaign at all.
+        mockMvc.perform(get("/api/campaigns/" + campaignId).session(playerSession))
+                .andExpect(status().isForbidden());
+
+        // The DM can still remove the remaining player directly.
+        long otherPlayerId = idOf(mockMvc.perform(get("/api/auth/me").session(otherSession))
+                .andExpect(status().isOk())
+                .andReturn());
+        mockMvc.perform(delete("/api/campaigns/" + campaignId + "/players/" + otherPlayerId).session(dmSession).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.players.length()").value(0));
+    }
+
+    @Test
     void maxPlayersIsEnforcedAndCannotDropBelowCurrentCount() throws Exception {
         String secondPlayer = "second_" + UUID.randomUUID().toString().substring(0, 8);
         register(secondPlayer);
@@ -301,6 +345,99 @@ class ApiFlowTest {
                 .content(json(Map.of("campaignId", campaignId))));
     }
 
+    @Test
+    void dmCanInviteACharacterAndPlayerMustConfirmBeforeItJoins() throws Exception {
+        long campaignId = createCampaign(dmSession, "Ghosts of Saltmarsh", "DND_5E");
+        addPlayer(dmSession, campaignId, playerUsername);
+        long characterId = createCharacter(playerSession, "Finnegan", "DND_5E", Map.of());
+        long playerId = idOf(mockMvc.perform(get("/api/auth/me").session(playerSession))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        mockMvc.perform(get("/api/campaigns/" + campaignId + "/players/" + playerId + "/characters").session(dmSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Finnegan"));
+
+        long inviteId = idOf(mockMvc.perform(authed(post("/api/campaigns/" + campaignId + "/invites"), dmSession)
+                        .content(json(Map.of("characterId", characterId))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.characterName").value("Finnegan"))
+                .andReturn());
+
+        // Not yet in the campaign: the invite is only a pending offer.
+        mockMvc.perform(get("/api/characters/" + characterId).session(playerSession))
+                .andExpect(jsonPath("$.campaign").isEmpty());
+        mockMvc.perform(get("/api/campaigns/" + campaignId).session(dmSession))
+                .andExpect(jsonPath("$.pendingInvites.length()").value(1))
+                .andExpect(jsonPath("$.characters.length()").value(0));
+
+        // A stranger cannot act on someone else's invite.
+        mockMvc.perform(post("/api/invites/" + inviteId + "/accept").session(dmSession).with(csrf()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/invites").session(playerSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].campaignName").value("Ghosts of Saltmarsh"))
+                .andExpect(jsonPath("$[0].characterName").value("Finnegan"));
+
+        mockMvc.perform(post("/api/invites/" + inviteId + "/accept").session(playerSession).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.campaign.id").value(campaignId));
+
+        mockMvc.perform(get("/api/invites").session(playerSession))
+                .andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(get("/api/campaigns/" + campaignId).session(dmSession))
+                .andExpect(jsonPath("$.pendingInvites.length()").value(0))
+                .andExpect(jsonPath("$.characters.length()").value(1));
+    }
+
+    @Test
+    void invitedCharacterCanBeDeclinedOrCancelledAndDmCannotInviteIneligibleCharacters() throws Exception {
+        long campaignId = createCampaign(dmSession, "Tomb of Horrors", "DND_5E");
+        addPlayer(dmSession, campaignId, playerUsername);
+        long characterId = createCharacter(playerSession, "Vecna's Foe", "DND_5E", Map.of());
+
+        mockMvc.perform(authed(post("/api/campaigns/" + campaignId + "/invites"), dmSession)
+                        .content(json(Map.of("characterId", characterId))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(org.hamcrest.Matchers.notNullValue()));
+
+        // Duplicate invite to the same campaign is rejected.
+        mockMvc.perform(authed(post("/api/campaigns/" + campaignId + "/invites"), dmSession)
+                        .content(json(Map.of("characterId", characterId))))
+                .andExpect(status().isConflict());
+
+        long inviteId = firstIdOf(mockMvc.perform(get("/api/invites").session(playerSession))
+                .andExpect(status().isOk())
+                .andReturn());
+        mockMvc.perform(post("/api/invites/" + inviteId + "/decline").session(playerSession).with(csrf()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/invites").session(playerSession))
+                .andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(get("/api/characters/" + characterId).session(playerSession))
+                .andExpect(jsonPath("$.campaign").isEmpty());
+
+        // Not a player of this campaign: cannot be invited.
+        String outsider = "outsider_" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        MockHttpSession outsiderSession = register(outsider);
+        long outsiderCharacterId = createCharacter(outsiderSession, "Rando", "DND_5E", Map.of());
+        mockMvc.perform(authed(post("/api/campaigns/" + campaignId + "/invites"), dmSession)
+                        .content(json(Map.of("characterId", outsiderCharacterId))))
+                .andExpect(status().isConflict());
+
+        // Only the DM can send or cancel invites for their own campaign.
+        long secondInviteId = idOf(mockMvc.perform(authed(post("/api/campaigns/" + campaignId + "/invites"), dmSession)
+                        .content(json(Map.of("characterId", characterId))))
+                .andExpect(status().isCreated())
+                .andReturn());
+        mockMvc.perform(delete("/api/campaigns/" + campaignId + "/invites/" + secondInviteId).session(playerSession).with(csrf()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/campaigns/" + campaignId + "/invites/" + secondInviteId).session(dmSession).with(csrf()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/campaigns/" + campaignId).session(dmSession))
+                .andExpect(jsonPath("$.pendingInvites.length()").value(0));
+    }
+
     private MockHttpSession register(String username) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/register").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -324,7 +461,7 @@ class ApiFlowTest {
         mockMvc.perform(authed(post("/api/campaigns/" + campaignId + "/players"), session)
                         .content(json(Map.of("username", username))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.players[0].username").value(username));
+                .andExpect(jsonPath("$.players[*].username", org.hamcrest.Matchers.hasItem(username)));
     }
 
     private long createCharacter(MockHttpSession session, String name, String gameSystem, Map<String, String> sheet) throws Exception {
@@ -341,6 +478,11 @@ class ApiFlowTest {
     private long idOf(MvcResult result) throws Exception {
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
         return body.get("id").asLong();
+    }
+
+    private long firstIdOf(MvcResult result) throws Exception {
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        return body.get(0).get("id").asLong();
     }
 
     private String json(Object value) throws Exception {

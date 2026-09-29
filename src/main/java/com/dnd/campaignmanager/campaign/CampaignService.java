@@ -1,5 +1,6 @@
 package com.dnd.campaignmanager.campaign;
 
+import com.dnd.campaignmanager.character.CharacterOption;
 import com.dnd.campaignmanager.character.PlayerCharacter;
 import com.dnd.campaignmanager.character.PlayerCharacterRepository;
 import com.dnd.campaignmanager.common.ConflictException;
@@ -7,6 +8,9 @@ import com.dnd.campaignmanager.common.ForbiddenException;
 import com.dnd.campaignmanager.common.InvalidRequestException;
 import com.dnd.campaignmanager.common.ResourceNotFoundException;
 import com.dnd.campaignmanager.gamesystem.SheetTemplate;
+import com.dnd.campaignmanager.invite.CampaignInvite;
+import com.dnd.campaignmanager.invite.CampaignInviteRepository;
+import com.dnd.campaignmanager.invite.PendingInvite;
 import com.dnd.campaignmanager.user.User;
 import com.dnd.campaignmanager.user.UserService;
 import com.dnd.campaignmanager.user.UserSummary;
@@ -25,6 +29,7 @@ public class CampaignService {
 
     private final CampaignRepository campaignRepository;
     private final PlayerCharacterRepository characterRepository;
+    private final CampaignInviteRepository inviteRepository;
     private final UserService userService;
 
     @Transactional(readOnly = true)
@@ -90,14 +95,19 @@ public class CampaignService {
         return toDetail(campaign, userId);
     }
 
-    public CampaignDetail removePlayer(Long campaignId, Long playerId, Long userId) {
-        Campaign campaign = getRunBy(campaignId, userId);
+    public CampaignDetail removePlayer(Long campaignId, Long playerId, Long requesterId) {
+        Campaign campaign = getById(campaignId);
+        boolean selfRemoval = requesterId.equals(playerId);
+        if (!selfRemoval && !campaign.isRunBy(requesterId)) {
+            throw new ForbiddenException("Only the " + campaign.getGameSystem().getGameMasterTitle()
+                    + " can remove another player. You can still leave the campaign yourself");
+        }
         if (!campaign.hasPlayer(playerId)) {
             throw new ResourceNotFoundException("Player", playerId);
         }
         characterRepository.findByCampaignIdAndOwnerId(campaignId, playerId).forEach(PlayerCharacter::leaveCampaign);
         campaign.removePlayer(playerId);
-        return toDetail(campaign, userId);
+        return toDetail(campaign, requesterId);
     }
 
     public NoteResponse addNote(Long campaignId, NoteRequest request, Long userId) {
@@ -138,6 +148,50 @@ public class CampaignService {
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Build constraint", constraintId));
         campaign.removeBuildConstraint(constraint);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CharacterOption> eligibleCharactersForInvite(Long campaignId, Long playerId, Long dmUserId) {
+        Campaign campaign = getRunBy(campaignId, dmUserId);
+        if (!campaign.hasPlayer(playerId)) {
+            throw new ResourceNotFoundException("Player", playerId);
+        }
+        return characterRepository
+                .findByOwnerIdAndGameSystemAndCampaignIsNullOrderByNameAsc(playerId, campaign.getGameSystem())
+                .stream()
+                .filter(character -> !inviteRepository.existsByCampaignIdAndCharacterId(campaignId, character.getId()))
+                .map(CharacterOption::from)
+                .toList();
+    }
+
+    public PendingInvite inviteCharacter(Long campaignId, Long characterId, Long dmUserId) {
+        Campaign campaign = getRunBy(campaignId, dmUserId);
+        PlayerCharacter character = characterRepository.findById(characterId)
+                .orElseThrow(() -> new ResourceNotFoundException("Character", characterId));
+
+        if (!campaign.hasPlayer(character.getOwner().getId())) {
+            throw new ConflictException(character.getOwner().getUsername() + " is not a player in this campaign");
+        }
+        if (character.getGameSystem() != campaign.getGameSystem()) {
+            throw new ConflictException("This character is built for " + character.getGameSystem().getDisplayName()
+                    + " but the campaign runs " + campaign.getGameSystem().getDisplayName());
+        }
+        if (character.isInCampaign()) {
+            throw new ConflictException(character.getName() + " is already in a campaign");
+        }
+        if (inviteRepository.existsByCampaignIdAndCharacterId(campaignId, characterId)) {
+            throw new ConflictException(character.getName() + " already has a pending invite to this campaign");
+        }
+
+        return PendingInvite.from(inviteRepository.save(new CampaignInvite(campaign, character)));
+    }
+
+    public void cancelInvite(Long campaignId, Long inviteId, Long dmUserId) {
+        getRunBy(campaignId, dmUserId);
+        CampaignInvite invite = inviteRepository.findById(inviteId)
+                .filter(candidate -> candidate.getCampaign().getId().equals(campaignId))
+                .orElseThrow(() -> new ResourceNotFoundException("Invite", inviteId));
+        inviteRepository.delete(invite);
     }
 
     public Campaign getVisibleTo(Long campaignId, Long viewerId) {
@@ -222,6 +276,12 @@ public class CampaignService {
                 .map(constraint -> BuildConstraintResponse.from(constraint, template))
                 .toList();
 
+        List<PendingInvite> pendingInvites = viewerIsDungeonMaster
+                ? inviteRepository.findByCampaignIdOrderByCreatedAtAsc(campaign.getId()).stream()
+                        .map(PendingInvite::from)
+                        .toList()
+                : List.of();
+
         return new CampaignDetail(
                 campaign.getId(),
                 campaign.getName(),
@@ -237,6 +297,7 @@ public class CampaignService {
                 characters,
                 notes,
                 constraints,
+                pendingInvites,
                 campaign.getCreatedAt(),
                 campaign.getUpdatedAt());
     }
